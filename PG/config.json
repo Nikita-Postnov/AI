@@ -1,0 +1,11 @@
+{
+    "salt_file": "salt.bin",
+    "max_password_length": 32,
+    "default_length": 18,
+    "use_uppercase": true,
+    "use_lowercase": true,
+    "use_digits": true,
+    "use_symbols": true,
+    "excluded_chars": "O0DQl1I|i!S5Z2B8G6CGceaouvwxX",
+    "passwords_file": "passwords.json"
+}
