@@ -16,7 +16,6 @@ from PySide6.QtCore import (
     QSettings,
     QSize,
     QEvent,
-    QPoint,
     QDateTime,
     QPoint,
     QRect,
@@ -29,16 +28,12 @@ from PySide6.QtCore import (
 from PySide6.QtGui import (
     QIcon,
     QCursor,
-    QPixmap,
     QTextListFormat,
     QShortcut,
     QTextImageFormat,
     QColor,
-    QPainter,
-    QPen,
     QPalette,
     QTextCursor,
-    QAction,
     QPixmap,
     QImage,
     QPainter,
@@ -392,7 +387,6 @@ class DrawingDialog(QDialog):
             self.setCursor(Qt.OpenHandCursor)
         else:
             self.setCursor(Qt.ArrowCursor)
-        self.drawing_mode = tool
 
     def choose_color(self):
         color = QColorDialog.getColor(self.pen_color, self)
@@ -807,8 +801,6 @@ class NotesApp(QMainWindow):
                     pixmap.save(buffer, "PNG")
                     base64_data = base64.b64encode(buffer.data()).decode("utf-8")
                     html_img = f'<img src="data:image/png;base64,{base64_data}" width="300"><br>'
-                    import re
-
                     pattern = re.compile(
                         rf'<img[^>]*src=["\']{re.escape(image_path)}["\'][^>]*>'
                     )
@@ -1740,7 +1732,9 @@ class NotesApp(QMainWindow):
             file_name.lower().endswith(fmt.data().decode()) for fmt in image_formats
         )
         if is_image:
-            self.text_edit.insertHtml(f'📄 <a href="file://{file_path}">{file_name}</a><br>')
+            self.text_edit.insertHtml(
+                f'📄 <a href="file://{destination}">{file_name}</a><br>'
+            )
         else:
             self.text_edit.insertHtml(
                 f'📄 <a href="file://{destination}">{file_name}</a><br>'
@@ -1778,7 +1772,7 @@ class NotesApp(QMainWindow):
             return
         attachments = []
         for file_name in os.listdir(note_dir):
-            if file_name != "note.txt":
+            if file_name != "note.json":
                 attachments.append(file_name)
         attachment_links = "\n".join(
             f'<a href="file://{os.path.abspath(os.path.join(note_dir, f))}">{f}</a>'
@@ -1951,18 +1945,14 @@ class NotesApp(QMainWindow):
 
     def apply_sorting(self):
         index = self.sort_combo.currentIndex()
+        reverse = self.sort_order_combo.currentIndex() == 1
+
         if index == 0:
-            reverse = self.sort_order_combo.currentIndex() == 1
-            if index == 0:
-                self.notes.sort(key=lambda note: note.title.lower(), reverse=reverse)
-            elif index == 1:
-                self.notes.sort(key=lambda note: note.timestamp, reverse=reverse)
-            elif index == 2:
-                self.show_favorites_only()
-                return
+            self.notes.sort(key=lambda note: note.title.lower(), reverse=reverse)
             self.refresh_notes_list()
         elif index == 1:
-            self.sort_notes_by_date()
+            self.notes.sort(key=lambda note: note.timestamp, reverse=reverse)
+            self.refresh_notes_list()
         elif index == 2:
             self.show_favorites_only()
 
@@ -1999,7 +1989,12 @@ class NotesApp(QMainWindow):
             self, "Редактировать изображение", "", "Images (*.png *.jpg *.bmp)"
         )
         if file_path:
-            editor = DrawingDialog(file_path, self)
+            editor = DrawingDialog(self, text_edit=self.text_edit)
+            img = QImage(file_path)
+            if not img.isNull():
+                editor.image = img.convertToFormat(QImage.Format_ARGB32)
+                editor.update_pixmap()
+                editor.orig_image_path = file_path
             editor.exec()
 
     def create_new_note(self):
@@ -2016,7 +2011,17 @@ class NotesApp(QMainWindow):
         safe_title = re.sub(r'[^\w\-_ ]', '_', title)[:40].strip()
         return f"{safe_title}_{note_uuid[:8]}"
 
-
+    def closeEvent(self, event):
+        self.save_settings()
+        if hasattr(self, "autosave_timer") and self.autosave_timer.isActive():
+            self.autosave_timer.stop()
+        if hasattr(self, "reminder_timer") and self.reminder_timer.isActive():
+            self.reminder_timer.stop()
+        if self.audio_thread and self.audio_thread.isRunning():
+            self.audio_thread.stop()
+            self.audio_thread.wait()
+            self.audio_thread = None
+        super().closeEvent(event)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
